@@ -22,6 +22,7 @@ An MCP (Model Context Protocol) server that lets an AI agent read and send Whats
 - [Manual end-to-end checklist](#manual-end-to-end-checklist)
 - [Troubleshooting](#troubleshooting)
 - [Docker](#docker)
+- [Deploying on Render](#deploying-on-render)
 - [Development](#development)
 
 ---
@@ -132,6 +133,7 @@ Copy `.env.example` and fill in the values, or export the variables in your shel
 | `WA_MCP_PORT` | `8787` | |
 | `WA_MCP_HOST` | `127.0.0.1` | The server refuses non-loopback addresses unless `WA_MCP_ALLOW_REMOTE=true` |
 | `WA_MCP_ALLOW_REMOTE` | `false` | Opt-in for remote binding. Logs a warning; put a TLS reverse proxy in front |
+| `WA_MCP_PUBLIC_URL` | `RENDER_EXTERNAL_URL`, else `http://<host>:<port>` | Public base URL used in links such as the QR page |
 | `WA_MCP_DB_PATH` | `~/.whatsapp-mcp/data.db` | Directory `0700`, files `0600` |
 | `WA_MCP_REQUIRE_CONFIRM` | `true` | Two-step sending. `false` adds a one-step `send_message` tool |
 | `WA_MCP_ALLOWLIST` | empty | Comma-separated phones/JIDs. Empty = allow all (warns at startup) |
@@ -374,6 +376,34 @@ docker run -d --name whatsapp-mcp -p 127.0.0.1:8787:8787 -v whatsapp-mcp-data:/d
 ```
 
 Inside the container the server binds `0.0.0.0` (`WA_MCP_ALLOW_REMOTE=true` is preset) so the port mapping works. **Publish the port on `127.0.0.1` only**, as shown above. The database lives on the `/data` volume. Run **one** container per WhatsApp account.
+
+---
+
+## Deploying on Render
+
+The repo includes a [`render.yaml`](render.yaml) Blueprint: a Node web service, a 1 GB persistent disk at `/var/data`, and `/health` as the health check.
+
+```mermaid
+flowchart LR
+    C[MCP client] -->|HTTPS + bearer token| R[Render TLS edge<br/>whatsapp-mcp.onrender.com]
+    R --> S[whatsapp-mcp<br/>single instance]
+    S --- D[(Persistent disk<br/>/var/data/data.db)]
+    S <-->|WebSocket| WA[WhatsApp]
+```
+
+1. In the Render dashboard, choose **New → Blueprint** and select this repository.
+2. Render generates `WA_MCP_TOKEN` and `WA_MCP_MASTER_KEY` for you. Copy both from the service's **Environment** tab into your password manager. If the master key is lost or regenerated, you must link the device again.
+3. Optionally set `WA_MCP_ALLOWLIST`.
+4. After the deploy, call `whatsapp_login`. The QR link uses the service's public URL automatically (`RENDER_EXTERNAL_URL`).
+
+Connect clients to `https://<your-service>.onrender.com/mcp` with the bearer token. Use the HTTP configs above, or set `WA_MCP_URL` to that address for the stdio shim.
+
+**Things to know:**
+
+- **A paid instance is required.** Persistent disks aren't available on the free plan, and free services sleep when idle. Without a disk, every deploy or restart loses the session and you have to scan again.
+- **Keep it to one instance.** A service with a disk can't scale out, and deploys stop the old instance before starting the new one, so two sockets never fight over the credentials. Don't also run a local copy against the same account.
+- **The endpoint is on the public internet.** The bearer token over Render's HTTPS is the only thing protecting it. Anyone with the token can message as you. The `/qr` page still requires its 5-minute token, but the loopback-only check is off when `WA_MCP_ALLOW_REMOTE=true`.
+- **Ban risk is higher.** WhatsApp sees a companion device on a datacenter IP rather than your home connection. Keep the guardrails at their defaults and test with a secondary number.
 
 ---
 

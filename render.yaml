@@ -1,0 +1,39 @@
+# Render Blueprint for whatsapp-mcp.
+# A persistent disk is required (it holds the encrypted WhatsApp session), which needs a paid
+# instance type. With a disk attached Render runs exactly one instance and stops the old one
+# before starting the new one on deploy, so two sockets never share the credentials.
+services:
+  - type: web
+    name: whatsapp-mcp
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    disk:
+      name: whatsapp-mcp-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: WA_MCP_HOST
+        value: 0.0.0.0
+      - key: WA_MCP_ALLOW_REMOTE
+        value: "true"
+      - key: WA_MCP_DB_PATH
+        value: /var/data/data.db
+      # Render's generateValue yields a random base64-encoded 256-bit value: valid for both.
+      - key: WA_MCP_TOKEN
+        generateValue: true
+      - key: WA_MCP_MASTER_KEY
+        generateValue: true
+      - key: WA_MCP_REQUIRE_CONFIRM
+        value: "true"
+      - key: WA_MCP_ALLOWLIST
+        sync: false
+      - key: WA_MCP_RATE_PER_MIN
+        value: "10"
+      - key: WA_MCP_NEW_CONTACTS_PER_DAY
+        value: "20"

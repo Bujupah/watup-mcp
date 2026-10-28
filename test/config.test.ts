@@ -35,6 +35,14 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, WA_MCP_REQUIRE_CONFIRM: 'maybe' })).toThrow(/boolean/);
   });
 
+  it('honours PORT and RENDER_EXTERNAL_URL from hosting platforms', () => {
+    const c = loadConfig({ ...base, PORT: '10000', RENDER_EXTERNAL_URL: 'https://wa.onrender.com/' });
+    expect(c).toMatchObject({ port: 10000, publicUrl: 'https://wa.onrender.com' });
+    expect(loadConfig({ ...base, PORT: '10000', WA_MCP_PORT: '9000' }).port).toBe(9000);
+    expect(loadConfig({ ...base }).publicUrl).toBeUndefined();
+    expect(() => loadConfig({ ...base, WA_MCP_PUBLIC_URL: 'ftp://x' })).toThrow(/WA_MCP_PUBLIC_URL/);
+  });
+
   it('refuses remote binding without opt-in', () => {
     expect(() => loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0' })).toThrow(/WA_MCP_ALLOW_REMOTE/);
     expect(loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0', WA_MCP_ALLOW_REMOTE: 'true' }).host).toBe('0.0.0.0');

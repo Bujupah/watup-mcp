@@ -74,6 +74,7 @@ async function main(): Promise<void> {
   const session = new SessionManager({ auth, cache, logger, syncFullHistory: config.syncFullHistory });
   const qrTokens = new QrTokens();
   const urlHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host.includes(':') ? `[${config.host}]` : config.host;
+  const baseUrl = config.publicUrl ?? `http://${urlHost}:${config.port}`;
 
   const ctx: ToolContext = {
     session,
@@ -82,7 +83,7 @@ async function main(): Promise<void> {
     qrTokens,
     logger,
     requireConfirm: config.requireConfirm,
-    qrUrl: (token) => `http://${urlHost}:${config.port}/qr?t=${encodeURIComponent(token)}`,
+    qrUrl: (token) => `${baseUrl}/qr?t=${encodeURIComponent(token)}`,
   };
 
   session.on('qr', (qr: string) => {
@@ -95,7 +96,7 @@ async function main(): Promise<void> {
 
   const app = createApp(ctx, { host: config.host, port: config.port, token: config.token, allowRemote: config.allowRemote });
   const server = await listen(app, { host: config.host, port: config.port, token: config.token, allowRemote: config.allowRemote });
-  logger.info({ url: `http://${urlHost}:${config.port}/mcp` }, 'MCP endpoint listening (Streamable HTTP, bearer auth)');
+  logger.info({ url: `${baseUrl}/mcp` }, 'MCP endpoint listening (Streamable HTTP, bearer auth)');
 
   await session.start();
 

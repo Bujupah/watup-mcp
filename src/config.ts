@@ -54,6 +54,7 @@ const EnvSchema = z.object({
   WA_MCP_RATE_PER_MIN: int(10, 1, 1000),
   WA_MCP_NEW_CONTACTS_PER_DAY: int(20, 0, 10000),
   WA_MCP_SYNC_FULL_HISTORY: bool(false),
+  WA_MCP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   WA_MCP_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
 });
 
@@ -70,6 +71,8 @@ export interface Config {
   newContactsPerDay: number;
   syncFullHistory: boolean;
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+  /** Externally reachable base URL (no trailing slash), used for links such as the QR page. */
+  publicUrl: string | undefined;
   accountId: string;
 }
 
@@ -104,7 +107,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!env.WA_MCP_MASTER_KEY || env.WA_MCP_MASTER_KEY.trim() === '') {
     throw new ConfigError('WA_MCP_MASTER_KEY is not set.', true);
   }
-  const parsed = EnvSchema.safeParse(env);
+  // Hosting platforms: Render (and others) inject PORT and RENDER_EXTERNAL_URL.
+  const parsed = EnvSchema.safeParse({
+    ...env,
+    WA_MCP_PORT: env.WA_MCP_PORT || env.PORT,
+    WA_MCP_PUBLIC_URL: env.WA_MCP_PUBLIC_URL || env.RENDER_EXTERNAL_URL || undefined,
+  });
   if (!parsed.success) {
     const msg = parsed.error.issues.map((i) => `  - ${i.path.join('.') || 'env'}: ${i.message}`).join('\n');
     throw new ConfigError(`Invalid configuration:\n${msg}`);
@@ -129,6 +137,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     newContactsPerDay: e.WA_MCP_NEW_CONTACTS_PER_DAY,
     syncFullHistory: e.WA_MCP_SYNC_FULL_HISTORY,
     logLevel: e.WA_MCP_LOG_LEVEL,
+    publicUrl: e.WA_MCP_PUBLIC_URL?.replace(/\/+$/, ''),
     accountId: 'default',
   };
 }
