@@ -61,14 +61,20 @@ export class FakeSocket implements SocketLike {
   }
 }
 
-export function fakeFactory(): { factory: SocketFactory; sockets: FakeSocket[]; last: () => FakeSocket } {
+export function fakeFactory(opts: { autoQr?: boolean } = {}): {
+  factory: SocketFactory;
+  sockets: FakeSocket[];
+  last: () => FakeSocket;
+} {
   const sockets: FakeSocket[] = [];
   return {
     sockets,
     last: () => sockets[sockets.length - 1]!,
-    factory: async (opts) => {
-      const s = new FakeSocket(opts);
+    factory: async (o) => {
+      const s = new FakeSocket(o);
       sockets.push(s);
+      // Unlinked sockets get a QR shortly after connecting, like the real thing.
+      if (opts.autoQr && !o.auth.creds.account) setImmediate(() => s.qr(`QR-${sockets.length}`));
       return s;
     },
   };

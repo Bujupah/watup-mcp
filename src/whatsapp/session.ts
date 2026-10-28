@@ -267,7 +267,7 @@ export class SessionManager extends EventEmitter {
       if (this.getState() === 'connected') return { status: 'already_connected' };
       const msg = (err as Error).message;
       await this.abortLogin(msg);
-      throw new SessionError(`${msg} Check network connectivity and try again.`);
+      throw new SessionError(msg.includes('whatsapp_login') ? msg : `${msg} Check network connectivity and try again.`);
     }
 
     if (opts.method === 'qr') return { status: 'qr', qr, scanDeadline: this.scanDeadline };
