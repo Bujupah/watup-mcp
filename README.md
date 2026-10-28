@@ -289,6 +289,7 @@ Every tool validates its input with zod. Failures come back as `isError: true` w
 | `list_chats` | `{ limit?, unreadOnly? }` | Recent chats with a last-message preview |
 | `read_messages` | `{ chat, limit?, before?, query? }` | `chat` = JID, phone, or exact contact/group name. `before` = ms timestamp (`nextBefore` from the previous page). `query` = FTS5 full-text search. |
 | `prepare_message` | `{ to, text }` | Resolves the recipient, runs guardrails, creates a draft that expires in 10 minutes. Returns `{ draftId, resolvedName, jid, preview, firstMessageToThisRecipient, expiresAt }`. **Does not send.** |
+| `prepare_media` | `{ to, url, kind: "image" \| "document", caption? }` | Downloads a file from a public `https://` link (max 16 MB), checks it (JPEG/PNG/WebP for images; PDF and other files as documents; audio and video are refused; private/local addresses are blocked, including via redirects), runs guardrails and creates a draft. Images are previewed in the result. **Does not send**; `confirm_send` sends it. |
 | `confirm_send` | `{ draftId }` | Re-checks guardrails, sends, records the result in the audit log. Returns `{ messageId, timestamp, jid }`. A draft can be sent only once. |
 | `cancel_draft` | `{ draftId }` | |
 | `send_message` | `{ to, text }` | **Only registered when `WA_MCP_REQUIRE_CONFIRM=false`.** One-step send, still subject to the allowlist and rate limits. |

@@ -81,7 +81,7 @@ describe('tools: auth', () => {
     const names = (await t.client.listTools()).tools.map((x) => x.name);
     expect(names).toEqual([
       'whatsapp_status', 'whatsapp_login', 'whatsapp_logout', 'search_contacts', 'list_chats',
-      'read_messages', 'prepare_message', 'confirm_send', 'cancel_draft',
+      'read_messages', 'prepare_message', 'prepare_media', 'confirm_send', 'cancel_draft',
     ]);
     const t2 = await setup({ requireConfirm: false });
     expect((await t2.client.listTools()).tools.map((x) => x.name)).toContain('send_message');
@@ -316,5 +316,50 @@ describe('tools: send', () => {
     const r = await t.call('confirm_send', { draftId: d.draftId });
     expect(r.isError).toBe(true);
     expect(t.text(r)).toMatch(/not connected/);
+  });
+});
+
+describe('tools: media', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 7)]);
+
+  it('prepare_media previews an image, then confirm_send sends it once with its caption', async () => {
+    const t = await setup();
+    await t.link();
+    t.seed();
+    t.ctx.fetchMedia = async (_url, kind) => ({ kind, data: PNG, mimetype: 'image/png', fileName: 'cat.png' });
+    const p = await t.call('prepare_media', { to: 'Mom', url: 'https://ex.com/cat.png', kind: 'image', caption: 'Look!' });
+    expect(p.isError).toBeFalsy();
+    expect(p.content[0]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    const d = t.json<{ draftId: string; kind: string; fileName: string; caption: string }>({ content: p.content.slice(1) } as CallToolResult);
+    expect(d).toMatchObject({ kind: 'image', fileName: 'cat.png', caption: 'Look!' });
+    expect(t.fake.last().sent).toHaveLength(0);
+
+    expect((await t.call('confirm_send', { draftId: d.draftId })).isError).toBeFalsy();
+    const sent = t.fake.last().sent;
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.jid).toBe(MOM);
+    const content = sent[0]!.content as { image: Buffer; caption: string; mimetype: string };
+    expect(Buffer.from(content.image).equals(PNG)).toBe(true);
+    expect(content).toMatchObject({ caption: 'Look!', mimetype: 'image/png' });
+    expect((await t.call('confirm_send', { draftId: d.draftId })).isError).toBe(true);
+  });
+
+  it('sends documents with their file name and surfaces download errors', async () => {
+    const t = await setup();
+    await t.link();
+    t.seed();
+    t.ctx.fetchMedia = async (url, kind) => {
+      if (url.includes('song')) {
+        const { MediaError } = await import('../src/media/fetchMedia.js');
+        throw new MediaError('Audio and video files are not supported. Send an image or a document.');
+      }
+      return { kind, data: Buffer.from('%PDF-1.7'), mimetype: 'application/pdf', fileName: 'invoice.pdf' };
+    };
+    const bad = await t.call('prepare_media', { to: MOM, url: 'https://ex.com/song.mp3', kind: 'document' });
+    expect(bad.isError).toBe(true);
+    expect(t.text(bad)).toMatch(/Audio and video files are not supported/);
+    const d = t.json<{ draftId: string }>(await t.call('prepare_media', { to: MOM, url: 'https://ex.com/invoice.pdf', kind: 'document' }));
+    await t.call('confirm_send', { draftId: d.draftId });
+    expect(t.fake.last().sent[0]!.content).toMatchObject({ fileName: 'invoice.pdf', mimetype: 'application/pdf' });
   });
 });

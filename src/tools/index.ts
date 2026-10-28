@@ -1,6 +1,7 @@
 import { whatsappLogin, whatsappLogout, whatsappStatus } from './auth.js';
 import { confirmCall, getCall, prepareCall } from './calls.js';
 import type { ToolDef, ZodShape } from './common.js';
+import { prepareMedia } from './media.js';
 import { listChats, readMessages, searchContactsTool } from './read.js';
 import { cancelDraft, confirmSend, prepareMessage, sendMessage } from './send.js';
 
@@ -14,6 +15,7 @@ export function toolList(requireConfirm: boolean, opts: { calls?: boolean } = {}
     listChats,
     readMessages,
     prepareMessage,
+    prepareMedia,
     confirmSend,
     cancelDraft,
     ...(requireConfirm ? [] : [sendMessage]),

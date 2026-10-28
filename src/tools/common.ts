@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { CacheStore, ContactRow } from '../db/cache.js';
 import { GuardrailError, type Guardrails } from '../guardrails/index.js';
 import type { QrTokens } from '../http/qrTokens.js';
+import type { FetchedMedia, MediaKind } from '../media/fetchMedia.js';
 import type { ElevenLabsCalls } from '../voice/calls.js';
 import type { ElevenLabs } from '../voice/elevenlabs.js';
 import { JidError, displayJid, isGroupJid, parseRecipient, phoneFromJid } from '../whatsapp/jid.js';
@@ -22,6 +23,8 @@ export interface ToolContext {
   voice?: ElevenLabs;
   /** Max characters per synthesized voice note. */
   voiceMaxChars?: number;
+  /** Downloads a file for prepare_media (defaults to fetchMedia with a 16 MB cap). */
+  fetchMedia?: (url: string, kind: MediaKind) => Promise<FetchedMedia>;
   /** Outbound phone calls via an ElevenLabs agent; call tools are only registered when this is set. */
   calls?: ElevenLabsCalls;
 }
@@ -68,7 +71,7 @@ export function toErrorResult(err: unknown, log: Logger): CallToolResult {
     err instanceof GuardrailError ||
     err instanceof JidError ||
     err instanceof SessionError ||
-    (err instanceof Error && err.name === 'ElevenLabsError')
+    (err instanceof Error && (err.name === 'ElevenLabsError' || err.name === 'MediaError'))
   ) {
     return errorResult(err.message);
   }

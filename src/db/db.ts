@@ -15,6 +15,11 @@ const MIGRATIONS: Array<() => string> = [
          ALTER TABLE drafts ADD COLUMN audio BLOB;
          ALTER TABLE drafts ADD COLUMN audio_mime TEXT;
          ALTER TABLE drafts ADD COLUMN ptt INTEGER NOT NULL DEFAULT 0;`,
+  // v3: image/document drafts
+  () => `ALTER TABLE drafts ADD COLUMN media BLOB;
+         ALTER TABLE drafts ADD COLUMN media_mime TEXT;
+         ALTER TABLE drafts ADD COLUMN media_name TEXT;
+         ALTER TABLE drafts ADD COLUMN media_kind TEXT;`,
 ];
 
 /**

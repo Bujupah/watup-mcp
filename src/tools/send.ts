@@ -80,6 +80,15 @@ export async function sendDraft(ctx: ToolContext, draftId: string) {
     if (draft.kind === 'voice') {
       if (!draft.audio || !draft.audio_mime) throw new Error('voice draft has no audio');
       sent = await ctx.session.sendVoice(draft.to_jid, draft.audio, draft.audio_mime, draft.ptt === 1);
+    } else if (draft.kind === 'media') {
+      if (!draft.media || !draft.media_mime || !draft.media_kind) throw new Error('media draft has no file');
+      sent = await ctx.session.sendMedia(draft.to_jid, {
+        kind: draft.media_kind,
+        data: draft.media,
+        mimetype: draft.media_mime,
+        fileName: draft.media_name ?? 'file',
+        ...(draft.text ? { caption: draft.text } : {}),
+      });
     } else {
       sent = await ctx.session.sendText(draft.to_jid, draft.text);
     }
@@ -134,7 +143,7 @@ export const confirmSend = defineTool({
   name: 'confirm_send',
   title: 'Send a drafted WhatsApp message',
   description:
-    'Step 2 of 2: sends a draft created by prepare_message. Only call this after the user has seen the draft and explicitly ' +
+    'Step 2 of 2: sends a draft created by prepare_message or prepare_media. Only call this after the user has seen the draft and explicitly ' +
     `approved sending it. Each draft can be sent once. ${POLICY}`,
   inputSchema: { draftId: z.string().min(1).max(64) },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },

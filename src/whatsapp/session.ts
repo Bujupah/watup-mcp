@@ -380,6 +380,19 @@ export class SessionManager extends EventEmitter {
     return this.enqueueSend(jid, 'recording', { audio, mimetype, ptt });
   }
 
+  /** Sends an image or a document, with an optional caption. Same queue and pacing as text. */
+  sendMedia(
+    jid: string,
+    media: { kind: 'image' | 'document'; data: Buffer; mimetype: string; fileName: string; caption?: string },
+  ): Promise<{ id: string; timestamp: number }> {
+    const caption = media.caption ? { caption: media.caption } : {};
+    const content: AnyMessageContent =
+      media.kind === 'image'
+        ? { image: media.data, mimetype: media.mimetype, ...caption }
+        : { document: media.data, mimetype: media.mimetype, fileName: media.fileName, ...caption };
+    return this.enqueueSend(jid, 'composing', content);
+  }
+
   /** Downloads the media of a message (re-requesting expired media from the phone if needed). */
   async downloadMedia(message: WAMessage): Promise<Buffer> {
     const sock = this.requireConnected();

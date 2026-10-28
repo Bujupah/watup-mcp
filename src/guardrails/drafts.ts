@@ -11,10 +11,21 @@ export interface Draft {
   created_at: number;
   expires_at: number;
   status: DraftStatus;
-  kind: 'text' | 'voice' | 'call';
+  kind: 'text' | 'voice' | 'call' | 'media';
   audio: Buffer | null;
   audio_mime: string | null;
   ptt: number;
+  media: Buffer | null;
+  media_mime: string | null;
+  media_name: string | null;
+  media_kind: 'image' | 'document' | null;
+}
+
+export interface DraftMedia {
+  kind: 'image' | 'document';
+  data: Buffer;
+  mimetype: string;
+  fileName: string;
 }
 
 export interface DraftVoice {
@@ -50,7 +61,10 @@ export class DraftStore {
       setStatus: db.prepare<[DraftStatus, string]>('UPDATE drafts SET status = ? WHERE id = ?'),
       purge: db.prepare<[number]>("DELETE FROM drafts WHERE expires_at < ? AND status IN ('pending', 'cancelled')"),
       // Audio is only needed until the draft is sent or dies; don't keep voice blobs around.
-      dropAudio: db.prepare<[string]>('UPDATE drafts SET audio = NULL WHERE id = ?'),
+      dropAudio: db.prepare<[string]>('UPDATE drafts SET audio = NULL, media = NULL WHERE id = ?'),
+      setMedia: db.prepare<[Buffer, string, string, string, string]>(
+        "UPDATE drafts SET kind = 'media', media = ?, media_mime = ?, media_name = ?, media_kind = ? WHERE id = ?",
+      ),
     };
   }
 
@@ -71,6 +85,13 @@ export class DraftStore {
       voice?.ptt ? 1 : 0,
     );
     return this.stmts.get.get(id)!;
+  }
+
+  /** Creates an image/document draft; `caption` is stored as the draft text. */
+  createMedia(toJid: string, caption: string, media: DraftMedia): Draft {
+    const d = this.create(toJid, caption);
+    this.stmts.setMedia.run(media.data, media.mimetype, media.fileName, media.kind, d.id);
+    return this.stmts.get.get(d.id)!;
   }
 
   get(id: string): Draft | undefined {
