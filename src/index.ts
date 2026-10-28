@@ -55,7 +55,17 @@ async function main(): Promise<void> {
 
   const db = openDatabase(config.dbPath);
   const cache = new CacheStore(db);
-  const auth = await useSqliteAuthState(db, config.accountId, config.masterKey);
+  let auth;
+  try {
+    auth = await useSqliteAuthState(db, config.accountId, config.masterKey);
+  } catch (err) {
+    logger.fatal(
+      { err: (err as Error).message },
+      'Cannot decrypt the stored WhatsApp session. WA_MCP_MASTER_KEY differs from the key used when the device was linked ' +
+        '(or the database is corrupted). Restore the original key, or point WA_MCP_DB_PATH at a fresh file and link again.',
+    );
+    process.exit(1);
+  }
   const guardrails = new Guardrails(db, cache, {
     allowlist: config.allowlist,
     ratePerMin: config.ratePerMin,

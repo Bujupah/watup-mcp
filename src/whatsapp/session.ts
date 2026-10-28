@@ -112,7 +112,8 @@ export const defaultSocketFactory: SocketFactory = async ({ auth, logger, syncFu
     auth: { creds: auth.creds, keys: makeCacheableSignalKeyStore(auth.keys, logger) },
     logger,
     // A recognised browser name keeps the companion platform id valid for pairing codes.
-    browser: Browsers.appropriate('Chrome'),
+    // WhatsApp only grants full history sync to desktop companions.
+    browser: syncFullHistory ? Browsers.macOS('Desktop') : Browsers.appropriate('Chrome'),
     markOnlineOnConnect: false,
     syncFullHistory,
     getMessage,
@@ -406,6 +407,8 @@ export class SessionManager extends EventEmitter {
       fetchGroupName: async (jid) => (await sock.groupMetadata(jid)).subject,
     });
     sock.ev.on('creds.update', () => {
+      // A torn-down socket must not overwrite credentials (e.g. after logout wiped them).
+      if (gen !== this.generation) return;
       void this.opts.auth.saveCreds().catch((err: unknown) => this.log.error({ err }, 'failed to persist creds'));
     });
     sock.ev.on('connection.update', (u) => {
