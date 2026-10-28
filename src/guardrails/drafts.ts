@@ -6,10 +6,21 @@ export type DraftStatus = 'pending' | 'sending' | 'sent' | 'cancelled' | 'failed
 export interface Draft {
   id: string;
   to_jid: string;
+  /** For voice drafts: the words that were spoken. */
   text: string;
   created_at: number;
   expires_at: number;
   status: DraftStatus;
+  kind: 'text' | 'voice';
+  audio: Buffer | null;
+  audio_mime: string | null;
+  ptt: number;
+}
+
+export interface DraftVoice {
+  audio: Buffer;
+  mimetype: string;
+  ptt: boolean;
 }
 
 export type ClaimResult =
@@ -28,8 +39,9 @@ export class DraftStore {
     private readonly ttlMs = DRAFT_TTL_MS,
   ) {
     this.stmts = {
-      insert: db.prepare<[string, string, string, number, number]>(
-        "INSERT INTO drafts (id, to_jid, text, created_at, expires_at, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+      insert: db.prepare<[string, string, string, number, number, string, Buffer | null, string | null, number]>(
+        `INSERT INTO drafts (id, to_jid, text, created_at, expires_at, status, kind, audio, audio_mime, ptt)
+         VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)`,
       ),
       get: db.prepare<[string], Draft>('SELECT * FROM drafts WHERE id = ?'),
       claim: db.prepare<[string, number]>(
@@ -37,15 +49,27 @@ export class DraftStore {
       ),
       setStatus: db.prepare<[DraftStatus, string]>('UPDATE drafts SET status = ? WHERE id = ?'),
       purge: db.prepare<[number]>("DELETE FROM drafts WHERE expires_at < ? AND status IN ('pending', 'cancelled')"),
+      // Audio is only needed until the draft is sent or dies; don't keep voice blobs around.
+      dropAudio: db.prepare<[string]>('UPDATE drafts SET audio = NULL WHERE id = ?'),
     };
   }
 
-  create(toJid: string, text: string): Draft {
+  create(toJid: string, text: string, voice?: DraftVoice): Draft {
     const t = this.now();
     // Drafts that expired over a day ago carry no value; drop them opportunistically.
     this.stmts.purge.run(t - 24 * 60 * 60 * 1000);
     const id = `d_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-    this.stmts.insert.run(id, toJid, text, t, t + this.ttlMs);
+    this.stmts.insert.run(
+      id,
+      toJid,
+      text,
+      t,
+      t + this.ttlMs,
+      voice ? 'voice' : 'text',
+      voice?.audio ?? null,
+      voice?.mimetype ?? null,
+      voice?.ptt ? 1 : 0,
+    );
     return this.stmts.get.get(id)!;
   }
 
@@ -70,10 +94,12 @@ export class DraftStore {
 
   markSent(id: string): void {
     this.stmts.setStatus.run('sent', id);
+    this.stmts.dropAudio.run(id);
   }
 
   markFailed(id: string): void {
     this.stmts.setStatus.run('failed', id);
+    this.stmts.dropAudio.run(id);
   }
 
   cancel(id: string): ClaimResult {
@@ -81,6 +107,7 @@ export class DraftStore {
     if (!d) return { ok: false, reason: 'not_found' };
     if (d.status !== 'pending') return { ok: false, reason: reasonFor(d), draft: d };
     this.stmts.setStatus.run('cancelled', id);
+    this.stmts.dropAudio.run(id);
     return { ok: true, draft: { ...d, status: 'cancelled' } };
   }
 }

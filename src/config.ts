@@ -55,6 +55,12 @@ const EnvSchema = z.object({
   WA_MCP_RATE_PER_MIN: int(10, 1, 1000),
   WA_MCP_NEW_CONTACTS_PER_DAY: int(20, 0, 10000),
   WA_MCP_SYNC_FULL_HISTORY: bool(false),
+  ELEVENLABS_API_KEY: z.string().trim().optional(),
+  // Default: "Rachel", a premade ElevenLabs voice. Use list_voices to pick a better one for your language.
+  WA_MCP_TTS_VOICE_ID: z.string().trim().min(1).default('21m00Tcm4TlvDq8ikWAM'),
+  WA_MCP_TTS_MODEL: z.string().trim().min(1).default('eleven_multilingual_v2'),
+  WA_MCP_STT_MODEL: z.string().trim().min(1).default('scribe_v1'),
+  WA_MCP_VOICE_MAX_CHARS: int(1000, 1, 5000),
   WA_MCP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   WA_MCP_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
   WA_MCP_BAILEYS_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('warn'),
@@ -76,6 +82,10 @@ export interface Config {
   syncFullHistory: boolean;
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
   baileysLogLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+  /** ElevenLabs settings; undefined when ELEVENLABS_API_KEY is not set (voice tools disabled). */
+  voice:
+    | { apiKey: string; voiceId: string; ttsModel: string; sttModel: string; maxChars: number }
+    | undefined;
   /** Externally reachable base URL (no trailing slash), used for links such as the QR page. */
   publicUrl: string | undefined;
   accountId: string;
@@ -144,6 +154,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     syncFullHistory: e.WA_MCP_SYNC_FULL_HISTORY,
     logLevel: e.WA_MCP_LOG_LEVEL,
     baileysLogLevel: e.WA_MCP_BAILEYS_LOG_LEVEL,
+    voice: e.ELEVENLABS_API_KEY
+      ? {
+          apiKey: e.ELEVENLABS_API_KEY,
+          voiceId: e.WA_MCP_TTS_VOICE_ID,
+          ttsModel: e.WA_MCP_TTS_MODEL,
+          sttModel: e.WA_MCP_STT_MODEL,
+          maxChars: e.WA_MCP_VOICE_MAX_CHARS,
+        }
+      : undefined,
     publicUrl: e.WA_MCP_PUBLIC_URL?.replace(/\/+$/, ''),
     accountId: 'default',
   };

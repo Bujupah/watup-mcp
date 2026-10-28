@@ -8,7 +8,14 @@ export type DB = Database.Database;
 const here = dirname(fileURLToPath(import.meta.url));
 
 /** Ordered migrations. Index + 1 is the resulting PRAGMA user_version. */
-const MIGRATIONS: Array<() => string> = [() => readFileSync(join(here, 'schema.sql'), 'utf8')];
+const MIGRATIONS: Array<() => string> = [
+  () => readFileSync(join(here, 'schema.sql'), 'utf8'),
+  // v2: voice-note drafts
+  () => `ALTER TABLE drafts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';
+         ALTER TABLE drafts ADD COLUMN audio BLOB;
+         ALTER TABLE drafts ADD COLUMN audio_mime TEXT;
+         ALTER TABLE drafts ADD COLUMN ptt INTEGER NOT NULL DEFAULT 0;`,
+];
 
 /**
  * Opens (creating if needed) the SQLite database with WAL enabled and applies migrations.

@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { CacheStore, ContactRow } from '../db/cache.js';
 import { GuardrailError, type Guardrails } from '../guardrails/index.js';
 import type { QrTokens } from '../http/qrTokens.js';
+import type { ElevenLabs } from '../voice/elevenlabs.js';
 import { JidError, displayJid, isGroupJid, parseRecipient, phoneFromJid } from '../whatsapp/jid.js';
 import { SessionError, type SessionManager } from '../whatsapp/session.js';
 
@@ -16,6 +17,10 @@ export interface ToolContext {
   requireConfirm: boolean;
   /** Builds the browser URL of the live QR page for a token. */
   qrUrl: (token: string) => string;
+  /** ElevenLabs client; voice tools are only registered when this is set. */
+  voice?: ElevenLabs;
+  /** Max characters per synthesized voice note. */
+  voiceMaxChars?: number;
 }
 
 export type ZodShape = Record<string, z.ZodType>;
@@ -55,7 +60,13 @@ export function errorResult(message: string): CallToolResult {
 
 /** Converts thrown errors into MCP tool errors with actionable text. */
 export function toErrorResult(err: unknown, log: Logger): CallToolResult {
-  if (err instanceof ToolError || err instanceof GuardrailError || err instanceof JidError || err instanceof SessionError) {
+  if (
+    err instanceof ToolError ||
+    err instanceof GuardrailError ||
+    err instanceof JidError ||
+    err instanceof SessionError ||
+    (err instanceof Error && err.name === 'ElevenLabsError')
+  ) {
     return errorResult(err.message);
   }
   log.error({ err }, 'tool failed');

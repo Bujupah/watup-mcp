@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { DraftVoice } from '../guardrails/drafts.js';
 import { MAX_MESSAGE_LENGTH } from '../guardrails/index.js';
 import { displayJid, isPnJid, phoneFromJid } from '../whatsapp/jid.js';
 import {
@@ -25,7 +26,7 @@ const toSchema = z
 const textSchema = z.string().min(1).max(MAX_MESSAGE_LENGTH * 4).describe(`Message text (max ${MAX_MESSAGE_LENGTH} characters)`);
 
 /** Resolves the recipient and, for never-seen phone numbers, checks the number is on WhatsApp. */
-async function resolveForSend(to: string, ctx: ToolContext): Promise<ResolvedRecipient> {
+export async function resolveForSend(to: string, ctx: ToolContext): Promise<ResolvedRecipient> {
   const r = resolveRecipient(to, ctx.cache);
   if (isPnJid(r.jid) && !ctx.cache.getContact(r.jid) && !ctx.cache.getChat(r.jid) && !ctx.guardrails.audit.hasSuccessfulSendTo(r.jid)) {
     const check = await ctx.session.onWhatsApp(phoneFromJid(r.jid)!);
@@ -34,17 +35,17 @@ async function resolveForSend(to: string, ctx: ToolContext): Promise<ResolvedRec
   return r;
 }
 
-function prepare(ctx: ToolContext, r: ResolvedRecipient, text: string) {
+export function prepare(ctx: ToolContext, r: ResolvedRecipient, text: string, voice?: DraftVoice) {
   ctx.guardrails.checkText(text);
   const { isNewRecipient } = ctx.guardrails.check(r.jid);
-  const draft = ctx.guardrails.drafts.create(r.jid, text);
+  const draft = ctx.guardrails.drafts.create(r.jid, text, voice);
   ctx.guardrails.audit.record({ action: 'prepare', toJid: r.jid, draftId: draft.id, result: 'ok', newRecipient: isNewRecipient });
   ctx.logger.debug({ draftId: draft.id, to: r.jid, text }, 'draft created');
   return { draft, isNewRecipient };
 }
 
 /** Claims a draft, re-checks guardrails and sends it. */
-async function sendDraft(ctx: ToolContext, draftId: string) {
+export async function sendDraft(ctx: ToolContext, draftId: string) {
   const claim = ctx.guardrails.drafts.claim(draftId);
   if (!claim.ok) {
     const why: Record<typeof claim.reason, string> = {
@@ -71,7 +72,13 @@ async function sendDraft(ctx: ToolContext, draftId: string) {
   ctx.guardrails.audit.record({ action: 'confirm', toJid: draft.to_jid, draftId, result: 'ok' });
   ctx.guardrails.rate.consume();
   try {
-    const sent = await ctx.session.sendText(draft.to_jid, draft.text);
+    let sent: { id: string; timestamp: number };
+    if (draft.kind === 'voice') {
+      if (!draft.audio || !draft.audio_mime) throw new Error('voice draft has no audio');
+      sent = await ctx.session.sendVoice(draft.to_jid, draft.audio, draft.audio_mime, draft.ptt === 1);
+    } else {
+      sent = await ctx.session.sendText(draft.to_jid, draft.text);
+    }
     ctx.guardrails.drafts.markSent(draftId);
     ctx.guardrails.audit.record({ action: 'send', toJid: draft.to_jid, draftId, result: 'ok', newRecipient: isNewRecipient });
     ctx.logger.info({ draftId, to: draft.to_jid, messageId: sent.id }, 'message sent');

@@ -255,6 +255,24 @@ export class CacheStore {
 
   // ---- reads -------------------------------------------------------------
 
+  /** One message including its raw protobuf JSON, looked up under every alias of the chat. */
+  getMessage(chatJid: string, id: string): (MessageRow & { raw: Buffer | null }) | undefined {
+    const stmt = this.db.prepare<[string, string], MessageRow & { raw: Buffer | null }>(
+      'SELECT id, chat_jid, from_me, sender_jid, ts, type, text, raw FROM messages WHERE chat_jid = ? AND id = ?',
+    );
+    for (const a of this.aliases(chatJid)) {
+      const r = stmt.get(a, id);
+      if (r) return r;
+    }
+    return undefined;
+  }
+
+  /** Stores text for a message (e.g. a voice-note transcript); the FTS index follows via triggers. */
+  setMessageText(chatJid: string, id: string, text: string): void {
+    const stmt = this.db.prepare<[string, string, string]>('UPDATE messages SET text = ? WHERE chat_jid = ? AND id = ?');
+    for (const a of this.aliases(chatJid)) stmt.run(text, a, id);
+  }
+
   getRawMessage(chatJid: string | undefined, id: string): Buffer | undefined {
     if (chatJid) {
       for (const a of this.aliases(chatJid)) {

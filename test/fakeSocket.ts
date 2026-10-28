@@ -36,6 +36,9 @@ export class FakeSocket implements SocketLike {
   async sendPresenceUpdate(type: string): Promise<void> {
     this.presences.push(type);
   }
+  async updateMediaMessage(m: WAMessage): Promise<WAMessage> {
+    return m;
+  }
   async groupMetadata(jid: string) {
     return { subject: `Group ${jid.slice(0, 4)}` };
   }

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Boom } from '@hapi/boom';
 import {
   Browsers,
+  downloadMediaMessage,
   BufferJSON,
   DisconnectReason,
   fetchLatestBaileysVersion,
@@ -38,6 +39,7 @@ export interface SocketLike {
   sendMessage(jid: string, content: AnyMessageContent): Promise<WAMessage | undefined>;
   sendPresenceUpdate(type: WAPresence, toJid?: string): Promise<void>;
   groupMetadata(jid: string): Promise<{ subject: string }>;
+  updateMediaMessage(message: WAMessage): Promise<WAMessage>;
 }
 
 export interface SocketFactoryOptions {
@@ -370,17 +372,37 @@ export class SessionManager extends EventEmitter {
 
   /** Sends a text message. All sends are serialized through a single queue with human-like pacing. */
   sendText(jid: string, text: string): Promise<{ id: string; timestamp: number }> {
+    return this.enqueueSend(jid, 'composing', { text });
+  }
+
+  /** Sends audio; with ptt it shows as a voice note (needs Ogg/Opus). Same queue and pacing as text. */
+  sendVoice(jid: string, audio: Buffer, mimetype: string, ptt: boolean): Promise<{ id: string; timestamp: number }> {
+    return this.enqueueSend(jid, 'recording', { audio, mimetype, ptt });
+  }
+
+  /** Downloads the media of a message (re-requesting expired media from the phone if needed). */
+  async downloadMedia(message: WAMessage): Promise<Buffer> {
+    const sock = this.requireConnected();
+    return downloadMediaMessage(
+      message,
+      'buffer',
+      {},
+      { logger: this.opts.logger.child({ mod: 'baileys' }, { level: 'warn' }), reuploadRequest: (m) => sock.updateMediaMessage(m) },
+    );
+  }
+
+  private enqueueSend(jid: string, presence: WAPresence, content: AnyMessageContent): Promise<{ id: string; timestamp: number }> {
     const run = async () => {
       const sock = this.requireConnected();
       const [min, max] = this.pacingMs;
       const delay = min + Math.floor(this.random() * Math.max(0, max - min));
       try {
-        await sock.sendPresenceUpdate('composing', jid);
+        await sock.sendPresenceUpdate(presence, jid);
       } catch (err) {
         this.log.debug({ err }, 'presence update failed');
       }
       if (delay > 0) await sleep(delay);
-      const sent = await this.requireConnected().sendMessage(jid, { text });
+      const sent = await this.requireConnected().sendMessage(jid, content);
       sock.sendPresenceUpdate('paused', jid).catch(() => undefined);
       const id = sent?.key?.id;
       if (!id) throw new SessionError('WhatsApp did not return a message id.');
