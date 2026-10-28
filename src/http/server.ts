@@ -12,6 +12,7 @@ export interface HttpOptions {
   port: number;
   token: string;
   allowRemote: boolean;
+  allowUrlToken?: boolean;
 }
 
 const LOOPBACK_ADDRS = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
@@ -75,6 +76,18 @@ export function createApp(ctx: ToolContext, opts: HttpOptions): express.Express 
   app.post('/mcp', auth, express.json({ limit: '1mb' }), mcpPostHandler(ctx));
   app.get('/mcp', auth, mcpMethodNotAllowed);
   app.delete('/mcp', auth, mcpMethodNotAllowed);
+
+  if (opts.allowUrlToken) {
+    // For clients that can't set headers (e.g. claude.ai custom connectors): POST /mcp/<token>.
+    const pathAuth = (req: Request, res: Response, next: NextFunction) => {
+      const t = req.params.token;
+      if (typeof t === 'string' && safeEqual(t, opts.token)) return next();
+      res.status(401).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unauthorized' }, id: null });
+    };
+    app.post('/mcp/:token', pathAuth, express.json({ limit: '1mb' }), mcpPostHandler(ctx));
+    app.get('/mcp/:token', pathAuth, mcpMethodNotAllowed);
+    app.delete('/mcp/:token', pathAuth, mcpMethodNotAllowed);
+  }
 
   const renderer = new QrRenderer();
   app.get('/qr', qrGuard(ctx, opts), (req, res) => {

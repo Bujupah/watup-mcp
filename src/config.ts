@@ -44,6 +44,7 @@ const EnvSchema = z.object({
   WA_MCP_PORT: int(8787, 1, 65535),
   WA_MCP_HOST: z.string().trim().min(1).default('127.0.0.1'),
   WA_MCP_ALLOW_REMOTE: bool(false),
+  WA_MCP_ALLOW_URL_TOKEN: bool(false),
   WA_MCP_TOKEN: z
     .string({ error: 'WA_MCP_TOKEN is required (bearer token for /mcp)' })
     .min(16, 'WA_MCP_TOKEN must be at least 16 characters'),
@@ -62,6 +63,8 @@ export interface Config {
   port: number;
   host: string;
   allowRemote: boolean;
+  /** Also accept the bearer token as a path segment: /mcp/<token> (for clients that can't send headers). */
+  allowUrlToken: boolean;
   token: string;
   masterKey: Buffer;
   dbPath: string;
@@ -128,6 +131,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     port: e.WA_MCP_PORT,
     host: e.WA_MCP_HOST,
     allowRemote: e.WA_MCP_ALLOW_REMOTE,
+    allowUrlToken: e.WA_MCP_ALLOW_URL_TOKEN,
     token: e.WA_MCP_TOKEN,
     masterKey: decodeMasterKey(e.WA_MCP_MASTER_KEY),
     dbPath: expandHome(e.WA_MCP_DB_PATH),

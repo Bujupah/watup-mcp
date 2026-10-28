@@ -29,6 +29,9 @@ services:
         generateValue: true
       - key: WA_MCP_MASTER_KEY
         generateValue: true
+      # Lets claude.ai custom connectors (no custom headers) use https://<service>/mcp/<token>.
+      - key: WA_MCP_ALLOW_URL_TOKEN
+        value: "true"
       - key: WA_MCP_REQUIRE_CONFIRM
         value: "true"
       - key: WA_MCP_ALLOWLIST

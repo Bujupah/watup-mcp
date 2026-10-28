@@ -49,6 +49,9 @@ async function main(): Promise<void> {
   if (config.allowlist.length === 0) {
     logger.warn('WA_MCP_ALLOWLIST is empty: the agent may message ANY recipient (still rate-limited and confirmed).');
   }
+  if (config.allowUrlToken) {
+    logger.warn('WA_MCP_ALLOW_URL_TOKEN=true: /mcp/<token> is accepted. The token is part of the URL, so keep that URL secret.');
+  }
   if (!config.requireConfirm) {
     logger.warn('WA_MCP_REQUIRE_CONFIRM=false: send_message sends in one step without a draft.');
   }
@@ -94,8 +97,15 @@ async function main(): Promise<void> {
   });
   session.on('logged_out', () => guardrails.audit.record({ action: 'logged_out', result: 'ok' }));
 
-  const app = createApp(ctx, { host: config.host, port: config.port, token: config.token, allowRemote: config.allowRemote });
-  const server = await listen(app, { host: config.host, port: config.port, token: config.token, allowRemote: config.allowRemote });
+  const httpOpts = {
+    host: config.host,
+    port: config.port,
+    token: config.token,
+    allowRemote: config.allowRemote,
+    allowUrlToken: config.allowUrlToken,
+  };
+  const app = createApp(ctx, httpOpts);
+  const server = await listen(app, httpOpts);
   logger.info({ url: `${baseUrl}/mcp` }, 'MCP endpoint listening (Streamable HTTP, bearer auth)');
 
   await session.start();

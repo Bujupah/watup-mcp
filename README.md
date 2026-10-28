@@ -133,6 +133,7 @@ Copy `.env.example` and fill in the values, or export the variables in your shel
 | `WA_MCP_PORT` | `8787` | |
 | `WA_MCP_HOST` | `127.0.0.1` | The server refuses non-loopback addresses unless `WA_MCP_ALLOW_REMOTE=true` |
 | `WA_MCP_ALLOW_REMOTE` | `false` | Opt-in for remote binding. Logs a warning; put a TLS reverse proxy in front |
+| `WA_MCP_ALLOW_URL_TOKEN` | `false` | Also accept the token in the path, `POST /mcp/<token>`, for clients that can't send headers (claude.ai) |
 | `WA_MCP_PUBLIC_URL` | `RENDER_EXTERNAL_URL`, else `http://<host>:<port>` | Public base URL used in links such as the QR page |
 | `WA_MCP_DB_PATH` | `~/.whatsapp-mcp/data.db` | Directory `0700`, files `0600` |
 | `WA_MCP_REQUIRE_CONFIRM` | `true` | Two-step sending. `false` adds a one-step `send_message` tool |
@@ -184,6 +185,16 @@ claude mcp add --transport http whatsapp http://127.0.0.1:8787/mcp --header "Aut
   }
 }
 ```
+
+### Claude on the web (claude.ai)
+
+claude.ai custom connectors call the server from Anthropic's cloud, so the server must be publicly reachable over HTTPS (for example [on Render](#deploying-on-render)). They also can't send an `Authorization` header, so enable path tokens with `WA_MCP_ALLOW_URL_TOKEN=true` and use the token in the URL:
+
+1. In claude.ai, open **Settings → Connectors → Add custom connector**.
+2. Name: `WhatsApp`. URL: `https://<your-service>/mcp/<WA_MCP_TOKEN>`. Leave the OAuth fields empty.
+3. In a chat, enable the connector from the tools menu and ask Claude to run `whatsapp_login`. Open the QR link it returns and scan it with your phone.
+
+The URL now contains the secret: anyone who sees it can message as you. Don't share it, and rotate `WA_MCP_TOKEN` (then update the connector) if it leaks. Render's request logs, visible only to your workspace, will contain the path.
 
 ### Claude Desktop (stdio shim)
 

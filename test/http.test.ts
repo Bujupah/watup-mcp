@@ -161,3 +161,22 @@ describe('stdio shim', () => {
     expect(stderr).toMatch(/ready/);
   }, 20_000);
 });
+
+describe('URL token mode', () => {
+  it('accepts /mcp/<token> only when enabled', async () => {
+    const app = createApp(ctx, { host: '127.0.0.1', port: 0, token: TOKEN, allowRemote: false, allowUrlToken: true });
+    const s = await new Promise<Server>((r) => {
+      const x = app.listen(0, '127.0.0.1', () => r(x));
+    });
+    const u = `http://127.0.0.1:${(s.address() as AddressInfo).port}`;
+    const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' };
+    const ok = await fetch(`${u}/mcp/${TOKEN}`, { method: 'POST', headers, body });
+    expect(ok.status).toBe(200);
+    expect((await fetch(`${u}/mcp/wrong-token`, { method: 'POST', headers, body })).status).toBe(401);
+    s.closeAllConnections();
+    await new Promise((r) => s.close(r));
+    // default server (beforeAll) has it disabled
+    expect((await fetch(`${base}/mcp/${TOKEN}`, { method: 'POST', headers, body })).status).toBe(404);
+  });
+});
