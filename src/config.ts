@@ -56,8 +56,8 @@ const EnvSchema = z.object({
   WA_MCP_NEW_CONTACTS_PER_DAY: int(20, 0, 10000),
   WA_MCP_SYNC_FULL_HISTORY: bool(false),
   ELEVENLABS_API_KEY: z.string().trim().optional(),
-  // Default: "Rachel", a premade ElevenLabs voice. Use list_voices to pick a better one for your language.
-  WA_MCP_TTS_VOICE_ID: z.string().trim().min(1).default('21m00Tcm4TlvDq8ikWAM'),
+  // Default: "Salim", a natural Tunisian Arabic voice (in the project owner's ElevenLabs account).
+  WA_MCP_TTS_VOICE_ID: z.string().trim().min(1).default('nH7M8bGCLQbKoS0wBZj7'),
   WA_MCP_TTS_MODEL: z.string().trim().min(1).default('eleven_multilingual_v2'),
   WA_MCP_STT_MODEL: z.string().trim().min(1).default('scribe_v1'),
   WA_MCP_VOICE_MAX_CHARS: int(1000, 1, 5000),
