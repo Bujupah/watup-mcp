@@ -22,7 +22,7 @@ import {
 import type { Logger } from 'pino';
 import type { CacheStore } from '../db/cache.js';
 import { attachCacheSync } from './cacheSync.js';
-import type { SqliteAuthState } from './authStore.js';
+import type { AuthStore } from './authStore.js';
 import { normalizePhone, phoneFromJid } from './jid.js';
 
 export type SessionState = 'disconnected' | 'connecting' | 'awaiting_scan' | 'connected' | 'logged_out';
@@ -73,7 +73,7 @@ export interface LoginResult {
 }
 
 export interface SessionManagerOptions {
-  auth: SqliteAuthState;
+  auth: AuthStore;
   cache: CacheStore;
   logger: Logger;
   socketFactory?: SocketFactory;

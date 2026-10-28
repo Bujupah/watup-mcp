@@ -39,6 +39,9 @@ services:
         sync: false
       - key: WA_MCP_CALL_PHONE_NUMBER_ID
         sync: false
+      # Optional: keep WhatsApp credentials in Postgres (Supabase session pooler URL) instead of the disk.
+      - key: WA_MCP_AUTH_DATABASE_URL
+        sync: false
       - key: WA_MCP_REQUIRE_CONFIRM
         value: "true"
       - key: WA_MCP_ALLOWLIST

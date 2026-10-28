@@ -136,6 +136,7 @@ Copy `.env.example` and fill in the values, or export the variables in your shel
 | `WA_MCP_ALLOW_REMOTE` | `false` | Opt-in for remote binding. Logs a warning; put a TLS reverse proxy in front |
 | `WA_MCP_ALLOW_URL_TOKEN` | `false` | Also accept the token in the path, `POST /mcp/<token>`, for clients that can't send headers (claude.ai) |
 | `WA_MCP_PUBLIC_URL` | `RENDER_EXTERNAL_URL`, else `http://<host>:<port>` | Public base URL used in links such as the QR page |
+| `WA_MCP_AUTH_DATABASE_URL` | unset | Postgres (e.g. Supabase session pooler) for the WhatsApp credentials, so they survive restarts without a disk |
 | `WA_MCP_DB_PATH` | `~/.whatsapp-mcp/data.db` | Directory `0700`, files `0600` |
 | `WA_MCP_REQUIRE_CONFIRM` | `true` | Two-step sending. `false` adds a one-step `send_message` tool |
 | `WA_MCP_ALLOWLIST` | empty | Comma-separated phones/JIDs. Empty = allow all (warns at startup) |
@@ -448,9 +449,21 @@ flowchart LR
 
 Connect clients to `https://<your-service>.onrender.com/mcp` with the bearer token. Use the HTTP configs above, or set `WA_MCP_URL` to that address for the stdio shim.
 
+### Free plan: keep the session in Supabase
+
+Without a disk, set `WA_MCP_AUTH_DATABASE_URL` to a Postgres connection string and the WhatsApp credentials survive restarts and deploys. Only the credentials move; the contact/message cache stays in local SQLite and refills as messages arrive.
+
+1. In Supabase: **Project Settings → Database → Connection string → Session pooler** (IPv4; Render can't reach the IPv6-only direct host). Copy the URI and fill in the database password.
+2. On Render, add it as `WA_MCP_AUTH_DATABASE_URL`. Optionally add Supabase's CA certificate (**Download certificate**) as `WA_MCP_AUTH_DATABASE_CA` to verify TLS.
+3. On first start the server creates a `whatsapp_mcp` schema (not exposed by Supabase's REST API, RLS enabled) with `auth_creds` and `auth_keys`.
+
+Everything stored is encrypted with `WA_MCP_MASTER_KEY` first, so Supabase only holds ciphertext. Keep the master key unchanged or the stored session can't be read.
+
+To stop the free instance from sleeping (which drops the WhatsApp connection until the next request), point a free uptime monitor at `/health` every 5–10 minutes.
+
 **Things to know:**
 
-- **A paid instance is required.** Persistent disks aren't available on the free plan, and free services sleep when idle. Without a disk, every deploy or restart loses the session and you have to scan again.
+- **A paid instance is needed for a disk.** Persistent disks aren't available on the free plan, and free services sleep when idle. Without a disk (and without `WA_MCP_AUTH_DATABASE_URL`), every deploy or restart loses the session and you have to link again.
 - **Keep it to one instance.** A service with a disk can't scale out, and deploys stop the old instance before starting the new one, so two sockets never fight over the credentials. Don't also run a local copy against the same account.
 - **The endpoint is on the public internet.** The bearer token over Render's HTTPS is the only thing protecting it. Anyone with the token can message as you. The `/qr` page still requires its 5-minute token, but the loopback-only check is off when `WA_MCP_ALLOW_REMOTE=true`.
 - **Ban risk is higher.** WhatsApp sees a companion device on a datacenter IP rather than your home connection. Keep the guardrails at their defaults and test with a secondary number.

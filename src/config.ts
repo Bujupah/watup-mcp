@@ -64,6 +64,12 @@ const EnvSchema = z.object({
   WA_MCP_CALL_AGENT_ID: z.string().trim().min(1).optional(),
   WA_MCP_CALL_PHONE_NUMBER_ID: z.string().trim().min(1).optional(),
   WA_MCP_CALL_PROVIDER: z.enum(['twilio', 'sip_trunk']).default('twilio'),
+  WA_MCP_AUTH_DATABASE_URL: z
+    .string()
+    .trim()
+    .regex(/^postgres(ql)?:\/\//, 'must be a postgres:// connection string')
+    .optional(),
+  WA_MCP_AUTH_DATABASE_CA: z.string().trim().min(1).optional(),
   WA_MCP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   WA_MCP_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
   WA_MCP_BAILEYS_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('warn'),
@@ -91,6 +97,8 @@ export interface Config {
     | undefined;
   /** Outbound phone calls via an ElevenLabs agent; undefined unless the key, agent and phone number are all set. */
   calls: { apiKey: string; agentId: string; phoneNumberId: string; provider: 'twilio' | 'sip_trunk' } | undefined;
+  /** Postgres (e.g. Supabase) for the WhatsApp credentials; undefined keeps them in the local SQLite file. */
+  authDatabase: { url: string; ca: string | undefined } | undefined;
   /** Externally reachable base URL (no trailing slash), used for links such as the QR page. */
   publicUrl: string | undefined;
   accountId: string;
@@ -177,6 +185,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
             provider: e.WA_MCP_CALL_PROVIDER,
           }
         : undefined,
+    authDatabase: e.WA_MCP_AUTH_DATABASE_URL ? { url: e.WA_MCP_AUTH_DATABASE_URL, ca: e.WA_MCP_AUTH_DATABASE_CA } : undefined,
     publicUrl: e.WA_MCP_PUBLIC_URL?.replace(/\/+$/, ''),
     accountId: 'default',
   };

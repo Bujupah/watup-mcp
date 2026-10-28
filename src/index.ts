@@ -9,7 +9,9 @@ import { Guardrails } from './guardrails/index.js';
 import { QrTokens } from './http/qrTokens.js';
 import { createApp, listen } from './http/server.js';
 import type { ToolContext } from './tools/index.js';
-import { useSqliteAuthState } from './whatsapp/authStore.js';
+import { createAuthPool, describeDbUrl } from './db/pg.js';
+import { useSqliteAuthState, type AuthStore } from './whatsapp/authStore.js';
+import { fromPgPool, usePgAuthState } from './whatsapp/pgAuthStore.js';
 import { ElevenLabsCalls } from './voice/calls.js';
 import { SessionManager } from './whatsapp/session.js';
 import { VERSION } from './version.js';
@@ -59,15 +61,27 @@ async function main(): Promise<void> {
 
   const db = openDatabase(config.dbPath);
   const cache = new CacheStore(db);
-  let auth;
+  // WhatsApp credentials: in Postgres when configured (survives hosts without a persistent disk), else local SQLite.
+  const authPool = config.authDatabase ? createAuthPool(config.authDatabase.url, config.authDatabase.ca, logger) : undefined;
+  let auth: AuthStore;
   try {
-    auth = await useSqliteAuthState(db, config.accountId, config.masterKey);
+    if (authPool && config.authDatabase) {
+      logger.info({ db: describeDbUrl(config.authDatabase.url) }, 'storing WhatsApp credentials in Postgres');
+      auth = await usePgAuthState(fromPgPool(authPool), config.accountId, config.masterKey);
+    } else {
+      auth = await useSqliteAuthState(db, config.accountId, config.masterKey);
+    }
   } catch (err) {
-    logger.fatal(
-      { err: (err as Error).message },
-      'Cannot decrypt the stored WhatsApp session. WA_MCP_MASTER_KEY differs from the key used when the device was linked ' +
-        '(or the database is corrupted). Restore the original key, or point WA_MCP_DB_PATH at a fresh file and link again.',
-    );
+    const msg = (err as Error).message;
+    if (/authenticate data|Unsupported state/i.test(msg)) {
+      logger.fatal(
+        { err: msg },
+        'Cannot decrypt the stored WhatsApp session. WA_MCP_MASTER_KEY differs from the key used when the device was linked ' +
+          '(or the stored data is corrupted). Restore the original key, or clear the stored credentials and link again.',
+      );
+    } else {
+      logger.fatal({ err: msg }, 'Cannot open the credential store. Check WA_MCP_AUTH_DATABASE_URL / WA_MCP_DB_PATH.');
+    }
     process.exit(1);
   }
   const guardrails = new Guardrails(db, cache, {
@@ -125,6 +139,7 @@ async function main(): Promise<void> {
       server.closeAllConnections();
       await closed;
       db.close();
+      await authPool?.end();
     } catch (err) {
       logger.error({ err }, 'error during shutdown');
     }

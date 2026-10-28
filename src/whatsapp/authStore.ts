@@ -10,7 +10,8 @@ import {
 import type { DB } from '../db/db.js';
 import { decrypt, encrypt } from '../crypto.js';
 
-export interface SqliteAuthState {
+/** A persisted Baileys AuthenticationState (SQLite or Postgres backed). */
+export interface AuthStore {
   state: AuthenticationState;
   saveCreds: () => Promise<void>;
   /** Deletes all stored credentials and keys for the account. */
@@ -19,14 +20,37 @@ export interface SqliteAuthState {
   hasStoredCreds: () => boolean;
 }
 
-type KeyType = keyof SignalDataTypeMap;
+/** @deprecated Use AuthStore. */
+export type SqliteAuthState = AuthStore;
+
+export type KeyType = keyof SignalDataTypeMap;
 
 /**
- * A Baileys AuthenticationState persisted in SQLite, with every value encrypted
- * using AES-256-GCM. The row identity (account/type/id) is bound as AAD so that
- * ciphertexts cannot be swapped between rows.
+ * Serialization + encryption shared by every auth store backend. Values are BufferJSON-encoded,
+ * then AES-256-GCM encrypted with the row identity (account/type/id) bound as AAD, so ciphertexts
+ * cannot be swapped between rows and the storage backend only ever sees ciphertext.
  */
-export async function useSqliteAuthState(db: DB, accountId: string, masterKey: Buffer): Promise<SqliteAuthState> {
+export function authCodec(accountId: string, masterKey: Buffer) {
+  const credsAad = `${accountId}:creds`;
+  const keyAad = (type: string, id: string) => `${accountId}:key:${type}:${id}`;
+  const seal = (value: unknown, aad: string): Buffer => encrypt(JSON.stringify(value, BufferJSON.replacer), masterKey, aad);
+  const open = <T>(blob: Buffer, aad: string): T => JSON.parse(decrypt(blob, masterKey, aad).toString('utf8'), BufferJSON.reviver) as T;
+  return {
+    sealCreds: (creds: AuthenticationCreds) => seal(creds, credsAad),
+    openCreds: (blob: Buffer) => open<AuthenticationCreds>(blob, credsAad),
+    sealKey: (type: KeyType, id: string, value: unknown) => seal(value, keyAad(type, id)),
+    openKey: <T extends KeyType>(type: T, id: string, blob: Buffer): SignalDataTypeMap[T] => {
+      const value = open<SignalDataTypeMap[T]>(blob, keyAad(type, id));
+      if (type === 'app-state-sync-key' && value) {
+        return proto.Message.AppStateSyncKeyData.fromObject(value as object) as unknown as SignalDataTypeMap[T];
+      }
+      return value;
+    },
+  };
+}
+
+/** A Baileys AuthenticationState persisted in the local SQLite database (values encrypted, see authCodec). */
+export async function useSqliteAuthState(db: DB, accountId: string, masterKey: Buffer): Promise<AuthStore> {
   const selCreds = db.prepare<[string], { value: Buffer }>('SELECT value FROM auth_creds WHERE account_id = ?');
   const upsertCreds = db.prepare<[string, Buffer, number]>(
     `INSERT INTO auth_creds (account_id, value, updated_at) VALUES (?, ?, ?)
@@ -43,15 +67,11 @@ export async function useSqliteAuthState(db: DB, accountId: string, masterKey: B
   const delAllKeys = db.prepare<[string]>('DELETE FROM auth_keys WHERE account_id = ?');
   const delCreds = db.prepare<[string]>('DELETE FROM auth_creds WHERE account_id = ?');
 
-  const credsAad = `${accountId}:creds`;
-  const keyAad = (type: string, id: string) => `${accountId}:key:${type}:${id}`;
-
-  const seal = (value: unknown, aad: string): Buffer => encrypt(JSON.stringify(value, BufferJSON.replacer), masterKey, aad);
-  const open = <T>(blob: Buffer, aad: string): T => JSON.parse(decrypt(blob, masterKey, aad).toString('utf8'), BufferJSON.reviver) as T;
+  const codec = authCodec(accountId, masterKey);
 
   const row = selCreds.get(accountId);
   let stored = row !== undefined;
-  let creds: AuthenticationCreds = row ? open<AuthenticationCreds>(row.value, credsAad) : initAuthCreds();
+  let creds: AuthenticationCreds = row ? codec.openCreds(row.value) : initAuthCreds();
 
   const setKeys = db.transaction((data: SignalDataSet) => {
     for (const type of Object.keys(data) as KeyType[]) {
@@ -59,7 +79,7 @@ export async function useSqliteAuthState(db: DB, accountId: string, masterKey: B
       if (!entries) continue;
       for (const [id, value] of Object.entries(entries)) {
         if (value === null || value === undefined) delKey.run(accountId, type, id);
-        else upsertKey.run(accountId, type, id, seal(value, keyAad(type, id)));
+        else upsertKey.run(accountId, type, id, codec.sealKey(type, id, value));
       }
     }
   });
@@ -77,11 +97,7 @@ export async function useSqliteAuthState(db: DB, accountId: string, masterKey: B
         for (const id of ids) {
           const r = selKey.get(accountId, type, id);
           if (!r) continue;
-          let value = open<SignalDataTypeMap[T]>(r.value, keyAad(type, id));
-          if (type === 'app-state-sync-key' && value) {
-            value = proto.Message.AppStateSyncKeyData.fromObject(value as object) as unknown as SignalDataTypeMap[T];
-          }
-          out[id] = value;
+          out[id] = codec.openKey(type, id, r.value);
         }
         return out;
       },
@@ -97,7 +113,7 @@ export async function useSqliteAuthState(db: DB, accountId: string, masterKey: B
   return {
     state,
     saveCreds: async () => {
-      upsertCreds.run(accountId, seal(creds, credsAad), Date.now());
+      upsertCreds.run(accountId, codec.sealCreds(creds), Date.now());
       stored = true;
     },
     clear: async () => {

@@ -50,6 +50,13 @@ describe('loadConfig', () => {
     ).toEqual({ apiKey: 'k', agentId: 'a', phoneNumberId: 'p', provider: 'twilio' });
   });
 
+  it('configures the Postgres credential store', () => {
+    expect(loadConfig({ ...base }).authDatabase).toBeUndefined();
+    const url = 'postgresql://postgres.abc:pw@aws-0-eu-west-1.pooler.supabase.com:5432/postgres';
+    expect(loadConfig({ ...base, WA_MCP_AUTH_DATABASE_URL: url }).authDatabase).toEqual({ url, ca: undefined });
+    expect(() => loadConfig({ ...base, WA_MCP_AUTH_DATABASE_URL: 'mysql://x' })).toThrow(/postgres/);
+  });
+
   it('refuses remote binding without opt-in', () => {
     expect(() => loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0' })).toThrow(/WA_MCP_ALLOW_REMOTE/);
     expect(loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0', WA_MCP_ALLOW_REMOTE: 'true' }).host).toBe('0.0.0.0');
