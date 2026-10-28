@@ -74,7 +74,7 @@ async function main(): Promise<void> {
     ratePerMin: config.ratePerMin,
     newContactsPerDay: config.newContactsPerDay,
   });
-  const session = new SessionManager({ auth, cache, logger, syncFullHistory: config.syncFullHistory });
+  const session = new SessionManager({ auth, cache, logger, syncFullHistory: config.syncFullHistory, baileysLogLevel: config.baileysLogLevel });
   const qrTokens = new QrTokens();
   const urlHost = config.host === '0.0.0.0' || config.host === '::' ? '127.0.0.1' : config.host.includes(':') ? `[${config.host}]` : config.host;
   const baseUrl = config.publicUrl ?? `http://${urlHost}:${config.port}`;

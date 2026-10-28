@@ -57,6 +57,7 @@ const EnvSchema = z.object({
   WA_MCP_SYNC_FULL_HISTORY: bool(false),
   WA_MCP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   WA_MCP_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
+  WA_MCP_BAILEYS_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('warn'),
 });
 
 export interface Config {
@@ -74,6 +75,7 @@ export interface Config {
   newContactsPerDay: number;
   syncFullHistory: boolean;
   logLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
+  baileysLogLevel: 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal' | 'silent';
   /** Externally reachable base URL (no trailing slash), used for links such as the QR page. */
   publicUrl: string | undefined;
   accountId: string;
@@ -141,6 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     newContactsPerDay: e.WA_MCP_NEW_CONTACTS_PER_DAY,
     syncFullHistory: e.WA_MCP_SYNC_FULL_HISTORY,
     logLevel: e.WA_MCP_LOG_LEVEL,
+    baileysLogLevel: e.WA_MCP_BAILEYS_LOG_LEVEL,
     publicUrl: e.WA_MCP_PUBLIC_URL?.replace(/\/+$/, ''),
     accountId: 'default',
   };

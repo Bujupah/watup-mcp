@@ -5,6 +5,7 @@ import {
   BufferJSON,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  fetchLatestWaWebVersion,
   makeCacheableSignalKeyStore,
   makeWASocket,
   proto,
@@ -44,6 +45,8 @@ export interface SocketFactoryOptions {
   logger: Logger;
   syncFullHistory: boolean;
   getMessage: (key: WAMessageKey) => Promise<proto.IMessage | undefined>;
+  /** Logger for our own diagnostics (the Baileys logger is usually quieter). */
+  appLogger?: Logger;
 }
 
 export type SocketFactory = (opts: SocketFactoryOptions) => Promise<SocketLike>;
@@ -73,6 +76,8 @@ export interface SessionManagerOptions {
   logger: Logger;
   socketFactory?: SocketFactory;
   syncFullHistory?: boolean;
+  /** Log level for Baileys' internal logger (default "warn"). */
+  baileysLogLevel?: string;
   /** How long a QR / pairing-code session may wait for the user before giving up. */
   scanTimeoutMs?: number;
   /** How long login() waits for the first QR / for the socket to be ready. */
@@ -92,28 +97,50 @@ class SessionError extends Error {
 }
 export { SessionError };
 
-let cachedVersion: WAVersion | undefined;
+const VERSION_TTL_MS = 6 * 60 * 60 * 1000;
+let cachedVersion: { version: WAVersion; at: number } | undefined;
+
+type VersionResult = { version: WAVersion; isLatest: boolean; error?: unknown };
+
+function withTimeout(p: Promise<VersionResult>, ms: number): Promise<VersionResult | undefined> {
+  return Promise.race([p, new Promise<undefined>((r) => setTimeout(() => r(undefined), ms).unref())]).catch(() => undefined);
+}
+
+/**
+ * Picks the WhatsApp Web version to announce. A stale version makes the phone reject linking
+ * ("Couldn't link device"), so prefer the live revision from web.whatsapp.com, then the one in
+ * Baileys' GitHub repo, then the bundled default. Both fetchers swallow errors and return the
+ * bundled version with isLatest=false, so check that flag rather than relying on exceptions.
+ */
+async function resolveWaVersion(log: Logger): Promise<WAVersion | undefined> {
+  if (cachedVersion && Date.now() - cachedVersion.at < VERSION_TTL_MS) return cachedVersion.version;
+  const sources: Array<[string, () => Promise<VersionResult>]> = [
+    ['web.whatsapp.com', () => fetchLatestWaWebVersion() as Promise<VersionResult>],
+    ['Baileys repo', () => fetchLatestBaileysVersion() as Promise<VersionResult>],
+  ];
+  for (const [source, fetcher] of sources) {
+    const res = await withTimeout(fetcher(), 8000);
+    if (res?.isLatest) {
+      cachedVersion = { version: res.version, at: Date.now() };
+      log.info({ version: res.version.join('.'), source }, 'using WhatsApp Web version');
+      return res.version;
+    }
+    log.warn({ source, error: (res?.error as Error | undefined)?.message ?? 'timeout' }, 'could not fetch WhatsApp Web version');
+  }
+  log.warn('falling back to the WhatsApp Web version bundled with Baileys; linking may fail if it is outdated');
+  return cachedVersion?.version;
+}
 
 /** Creates a real Baileys socket. */
-export const defaultSocketFactory: SocketFactory = async ({ auth, logger, syncFullHistory, getMessage }) => {
-  if (!cachedVersion) {
-    try {
-      const res = await Promise.race([
-        fetchLatestBaileysVersion(),
-        new Promise<never>((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000).unref()),
-      ]);
-      cachedVersion = res.version;
-    } catch (err) {
-      logger.warn({ err }, 'could not fetch latest WhatsApp Web version; using Baileys default');
-    }
-  }
+export const defaultSocketFactory: SocketFactory = async ({ auth, logger, syncFullHistory, getMessage, appLogger }) => {
+  const version = await resolveWaVersion(appLogger ?? logger);
   const sock = makeWASocket({
-    ...(cachedVersion ? { version: cachedVersion } : {}),
+    ...(version ? { version } : {}),
     auth: { creds: auth.creds, keys: makeCacheableSignalKeyStore(auth.keys, logger) },
     logger,
     // A recognised browser name keeps the companion platform id valid for pairing codes.
     // WhatsApp only grants full history sync to desktop companions.
-    browser: syncFullHistory ? Browsers.macOS('Desktop') : Browsers.appropriate('Chrome'),
+    browser: syncFullHistory ? Browsers.macOS('Desktop') : Browsers.ubuntu('Chrome'),
     markOnlineOnConnect: false,
     syncFullHistory,
     getMessage,
@@ -387,7 +414,8 @@ export class SessionManager extends EventEmitter {
     try {
       sock = await this.factory({
         auth: this.opts.auth.state,
-        logger: this.opts.logger.child({ mod: 'baileys' }, { level: 'warn' }),
+        logger: this.opts.logger.child({ mod: 'baileys' }, { level: this.opts.baileysLogLevel ?? 'warn' }),
+        appLogger: this.log,
         syncFullHistory: this.opts.syncFullHistory ?? false,
         getMessage: async (key) => this.loadMessage(key),
       });
@@ -419,6 +447,7 @@ export class SessionManager extends EventEmitter {
 
   private async onConnectionUpdate(u: Partial<ConnectionState>, sock: SocketLike): Promise<void> {
     if (u.qr) {
+      this.log.info({ method: this.loginMethod ?? 'qr' }, this.currentQr ? 'QR rotated' : 'QR issued; waiting for scan');
       this.currentQr = u.qr;
       if (this.state !== 'awaiting_scan') this.setState('awaiting_scan');
       // In pairing-code mode the first QR only signals that the socket is ready for requestPairingCode().
@@ -426,6 +455,7 @@ export class SessionManager extends EventEmitter {
       if (this.loginMethod !== 'pairing_code') this.emitState();
     }
     if (u.connection === 'connecting' && this.state !== 'awaiting_scan') this.setState('connecting');
+    if (u.isNewLogin) this.log.info('pairing accepted by the phone; waiting for WhatsApp to restart the connection');
     if (u.connection === 'open') {
       this.attempt = 0;
       this.lastConnectedAt = Date.now();
