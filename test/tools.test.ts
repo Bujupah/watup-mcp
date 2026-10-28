@@ -81,7 +81,7 @@ describe('tools: auth', () => {
     const names = (await t.client.listTools()).tools.map((x) => x.name);
     expect(names).toEqual([
       'whatsapp_status', 'whatsapp_login', 'whatsapp_logout', 'search_contacts', 'list_chats',
-      'read_messages', 'prepare_message', 'prepare_media', 'confirm_send', 'cancel_draft',
+      'read_messages', 'get_media', 'prepare_message', 'prepare_media', 'confirm_send', 'cancel_draft',
     ]);
     const t2 = await setup({ requireConfirm: false });
     expect((await t2.client.listTools()).tools.map((x) => x.name)).toContain('send_message');
@@ -361,5 +361,44 @@ describe('tools: media', () => {
     const d = t.json<{ draftId: string }>(await t.call('prepare_media', { to: MOM, url: 'https://ex.com/invoice.pdf', kind: 'document' }));
     await t.call('confirm_send', { draftId: d.draftId });
     expect(t.fake.last().sent[0]!.content).toMatchObject({ fileName: 'invoice.pdf', mimetype: 'application/pdf' });
+  });
+});
+
+describe('tools: get_media', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(16, 3)]);
+  const raw = (m: object) => Buffer.from(JSON.stringify(m));
+
+  it('downloads a received image, shows it and returns a short-lived link', async () => {
+    const t = await setup();
+    await t.link();
+    t.seed();
+    const { MediaShare } = await import('../src/media/mediaShare.js');
+    t.ctx.mediaShare = new MediaShare('https://wa.example');
+    t.cache.upsertMessages([
+      { id: 'IMG1', chatJid: MOM, fromMe: false, senderJid: MOM, ts: 5000, type: 'image', text: 'my product', raw: raw({ imageMessage: { mimetype: 'image/png', caption: 'my product', fileLength: PNG.length } }) },
+      { id: 'AUD1', chatJid: MOM, fromMe: false, senderJid: MOM, ts: 6000, type: 'audio', text: null, raw: raw({ audioMessage: { mimetype: 'audio/ogg', ptt: true } }) },
+    ]);
+    const downloads: string[] = [];
+    t.session.downloadMedia = async (m) => {
+      downloads.push(m.key.id!);
+      return PNG;
+    };
+    const r = await t.call('get_media', { chat: 'Mom', messageId: 'IMG1' });
+    expect(r.isError).toBeFalsy();
+    expect(r.content[0]).toMatchObject({ type: 'image', mimeType: 'image/png' });
+    const info = t.json<{ kind: string; caption: string; url: string; fileName: string }>({ content: r.content.slice(1) } as CallToolResult);
+    expect(info).toMatchObject({ kind: 'image', caption: 'my product', fileName: 'IMG1.png' });
+    expect(info.url).toMatch(/^https:\/\/wa\.example\/media\/[\w-]{20,}$/);
+    const shared = t.ctx.mediaShare.get(info.url.split('/').pop()!);
+    expect(shared?.data.equals(PNG)).toBe(true);
+    expect(downloads).toEqual(['IMG1']);
+
+    const audio = await t.call('get_media', { chat: 'Mom', messageId: 'AUD1' });
+    expect(audio.isError).toBe(true);
+    expect(t.text(audio)).toMatch(/Audio and video/);
+    const text = await t.call('get_media', { chat: 'Mom', messageId: 'm1' });
+    expect(t.text(text)).toMatch(/no stored media|no image or document/);
+    expect((await t.call('get_media', { chat: 'Mom', messageId: 'nope' })).isError).toBe(true);
+    expect(downloads).toEqual(['IMG1']);
   });
 });

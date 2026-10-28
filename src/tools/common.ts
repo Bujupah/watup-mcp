@@ -5,6 +5,7 @@ import type { CacheStore, ContactRow } from '../db/cache.js';
 import { GuardrailError, type Guardrails } from '../guardrails/index.js';
 import type { QrTokens } from '../http/qrTokens.js';
 import type { FetchedMedia, MediaKind } from '../media/fetchMedia.js';
+import type { MediaShare } from '../media/mediaShare.js';
 import type { ElevenLabsCalls } from '../voice/calls.js';
 import type { ElevenLabs } from '../voice/elevenlabs.js';
 import { JidError, displayJid, isGroupJid, parseRecipient, phoneFromJid } from '../whatsapp/jid.js';
@@ -25,6 +26,8 @@ export interface ToolContext {
   voiceMaxChars?: number;
   /** Downloads a file for prepare_media (defaults to fetchMedia with a 16 MB cap). */
   fetchMedia?: (url: string, kind: MediaKind) => Promise<FetchedMedia>;
+  /** Serves downloaded media at short-lived public links (get_media). */
+  mediaShare?: MediaShare;
   /** Outbound phone calls via an ElevenLabs agent; call tools are only registered when this is set. */
   calls?: ElevenLabsCalls;
 }

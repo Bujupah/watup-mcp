@@ -12,6 +12,7 @@ import type { ToolContext } from './tools/index.js';
 import { createAuthPool, describeDbUrl } from './db/pg.js';
 import { useSqliteAuthState, type AuthStore } from './whatsapp/authStore.js';
 import { fromPgPool, usePgAuthState } from './whatsapp/pgAuthStore.js';
+import { MediaShare } from './media/mediaShare.js';
 import { ElevenLabsCalls } from './voice/calls.js';
 import { SessionManager } from './whatsapp/session.js';
 import { VERSION } from './version.js';
@@ -102,6 +103,8 @@ async function main(): Promise<void> {
     logger,
     requireConfirm: config.requireConfirm,
     ...(config.calls ? { calls: new ElevenLabsCalls(config.calls) } : {}),
+    // Links are only useful when the server is reachable from outside (e.g. on Render).
+    ...(config.publicUrl ? { mediaShare: new MediaShare(config.publicUrl) } : {}),
     qrUrl: (token) => `${baseUrl}/qr?t=${encodeURIComponent(token)}`,
   };
 

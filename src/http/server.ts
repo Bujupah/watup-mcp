@@ -72,6 +72,21 @@ export function createApp(ctx: ToolContext, opts: HttpOptions): express.Express 
     res.json({ ok: true, state: ctx.session.getState() });
   });
 
+  // Short-lived links to media downloaded with get_media (the token is the credential).
+  app.get('/media/:token', (req, res) => {
+    const file = ctx.mediaShare?.get(req.params.token);
+    if (!file) {
+      res.status(404).type('text/plain').send('Link expired or not found.');
+      return;
+    }
+    const inlineImage = /^image\/(jpeg|png|webp|gif)$/.test(file.mimetype);
+    const safeName = file.fileName.replace(/[^\w.\- ]/g, '_') || 'file';
+    res.set('Content-Security-Policy', "default-src 'none'; sandbox");
+    res.set('Referrer-Policy', 'no-referrer');
+    res.set('Content-Disposition', `${inlineImage ? 'inline' : 'attachment'}; filename="${safeName}"`);
+    res.type(inlineImage ? file.mimetype : 'application/octet-stream').send(file.data);
+  });
+
   const auth = bearerAuth(opts.token);
   app.post('/mcp', auth, express.json({ limit: '1mb' }), mcpPostHandler(ctx));
   app.get('/mcp', auth, mcpMethodNotAllowed);

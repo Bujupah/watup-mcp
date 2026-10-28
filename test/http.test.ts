@@ -180,3 +180,26 @@ describe('URL token mode', () => {
     expect((await fetch(`${base}/mcp/${TOKEN}`, { method: 'POST', headers, body })).status).toBe(404);
   });
 });
+
+describe('media links', () => {
+  it('serves shared images inline and other files as sandboxed downloads, then expire', async () => {
+    const { MediaShare } = await import('../src/media/mediaShare.js');
+    let now = 1_000;
+    const share = new MediaShare(base, 60_000, 20, 1024 * 1024, () => now);
+    ctx.mediaShare = share;
+    const img = share.put(Buffer.from([0x89, 0x50]), 'image/png', 'cat.png');
+    const doc = share.put(Buffer.from('<html><script>x</script>'), 'text/html', 'evil.html');
+    const r1 = await fetch(img.url);
+    expect(r1.status).toBe(200);
+    expect(r1.headers.get('content-type')).toBe('image/png');
+    expect(r1.headers.get('content-disposition')).toMatch(/^inline/);
+    const r2 = await fetch(doc.url);
+    expect(r2.headers.get('content-type')).toMatch(/application\/octet-stream/);
+    expect(r2.headers.get('content-disposition')).toMatch(/^attachment/);
+    expect(r2.headers.get('content-security-policy')).toMatch(/sandbox/);
+    expect((await fetch(`${base}/media/guess`)).status).toBe(404);
+    now += 61_000;
+    expect((await fetch(img.url)).status).toBe(404);
+    delete ctx.mediaShare;
+  });
+});
