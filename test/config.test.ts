@@ -43,6 +43,13 @@ describe('loadConfig', () => {
     expect(() => loadConfig({ ...base, WA_MCP_PUBLIC_URL: 'ftp://x' })).toThrow(/WA_MCP_PUBLIC_URL/);
   });
 
+  it('enables phone calls only when key, agent and number are all set', () => {
+    expect(loadConfig({ ...base, ELEVENLABS_API_KEY: 'k', WA_MCP_CALL_AGENT_ID: 'a' }).calls).toBeUndefined();
+    expect(
+      loadConfig({ ...base, ELEVENLABS_API_KEY: 'k', WA_MCP_CALL_AGENT_ID: 'a', WA_MCP_CALL_PHONE_NUMBER_ID: 'p' }).calls,
+    ).toEqual({ apiKey: 'k', agentId: 'a', phoneNumberId: 'p', provider: 'twilio' });
+  });
+
   it('refuses remote binding without opt-in', () => {
     expect(() => loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0' })).toThrow(/WA_MCP_ALLOW_REMOTE/);
     expect(loadConfig({ ...base, WA_MCP_HOST: '0.0.0.0', WA_MCP_ALLOW_REMOTE: 'true' }).host).toBe('0.0.0.0');

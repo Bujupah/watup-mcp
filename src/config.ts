@@ -61,6 +61,9 @@ const EnvSchema = z.object({
   WA_MCP_TTS_MODEL: z.string().trim().min(1).default('eleven_multilingual_v2'),
   WA_MCP_STT_MODEL: z.string().trim().min(1).default('scribe_v1'),
   WA_MCP_VOICE_MAX_CHARS: int(1000, 1, 5000),
+  WA_MCP_CALL_AGENT_ID: z.string().trim().min(1).optional(),
+  WA_MCP_CALL_PHONE_NUMBER_ID: z.string().trim().min(1).optional(),
+  WA_MCP_CALL_PROVIDER: z.enum(['twilio', 'sip_trunk']).default('twilio'),
   WA_MCP_PUBLIC_URL: z.url({ protocol: /^https?$/ }).optional(),
   WA_MCP_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('info'),
   WA_MCP_BAILEYS_LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal', 'silent']).default('warn'),
@@ -86,6 +89,8 @@ export interface Config {
   voice:
     | { apiKey: string; voiceId: string; ttsModel: string; sttModel: string; maxChars: number }
     | undefined;
+  /** Outbound phone calls via an ElevenLabs agent; undefined unless the key, agent and phone number are all set. */
+  calls: { apiKey: string; agentId: string; phoneNumberId: string; provider: 'twilio' | 'sip_trunk' } | undefined;
   /** Externally reachable base URL (no trailing slash), used for links such as the QR page. */
   publicUrl: string | undefined;
   accountId: string;
@@ -163,6 +168,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
           maxChars: e.WA_MCP_VOICE_MAX_CHARS,
         }
       : undefined,
+    calls:
+      e.ELEVENLABS_API_KEY && e.WA_MCP_CALL_AGENT_ID && e.WA_MCP_CALL_PHONE_NUMBER_ID
+        ? {
+            apiKey: e.ELEVENLABS_API_KEY,
+            agentId: e.WA_MCP_CALL_AGENT_ID,
+            phoneNumberId: e.WA_MCP_CALL_PHONE_NUMBER_ID,
+            provider: e.WA_MCP_CALL_PROVIDER,
+          }
+        : undefined,
     publicUrl: e.WA_MCP_PUBLIC_URL?.replace(/\/+$/, ''),
     accountId: 'default',
   };

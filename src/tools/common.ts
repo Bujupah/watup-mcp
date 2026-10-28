@@ -4,6 +4,7 @@ import type { z } from 'zod';
 import type { CacheStore, ContactRow } from '../db/cache.js';
 import { GuardrailError, type Guardrails } from '../guardrails/index.js';
 import type { QrTokens } from '../http/qrTokens.js';
+import type { ElevenLabsCalls } from '../voice/calls.js';
 import type { ElevenLabs } from '../voice/elevenlabs.js';
 import { JidError, displayJid, isGroupJid, parseRecipient, phoneFromJid } from '../whatsapp/jid.js';
 import { SessionError, type SessionManager } from '../whatsapp/session.js';
@@ -21,6 +22,8 @@ export interface ToolContext {
   voice?: ElevenLabs;
   /** Max characters per synthesized voice note. */
   voiceMaxChars?: number;
+  /** Outbound phone calls via an ElevenLabs agent; call tools are only registered when this is set. */
+  calls?: ElevenLabsCalls;
 }
 
 export type ZodShape = Record<string, z.ZodType>;

@@ -60,6 +60,10 @@ export async function sendDraft(ctx: ToolContext, draftId: string) {
     throw new ToolError(why[claim.reason]);
   }
   const draft = claim.draft;
+  if (draft.kind === 'call') {
+    ctx.guardrails.drafts.release(draftId);
+    throw new ToolError(`Draft ${draftId} is a phone call. Use confirm_call for it.`);
+  }
   let isNewRecipient: boolean;
   try {
     requireConnected(ctx);

@@ -11,7 +11,7 @@ export interface Draft {
   created_at: number;
   expires_at: number;
   status: DraftStatus;
-  kind: 'text' | 'voice';
+  kind: 'text' | 'voice' | 'call';
   audio: Buffer | null;
   audio_mime: string | null;
   ptt: number;
@@ -54,7 +54,7 @@ export class DraftStore {
     };
   }
 
-  create(toJid: string, text: string, voice?: DraftVoice): Draft {
+  create(toJid: string, text: string, voice?: DraftVoice, kind?: 'call'): Draft {
     const t = this.now();
     // Drafts that expired over a day ago carry no value; drop them opportunistically.
     this.stmts.purge.run(t - 24 * 60 * 60 * 1000);
@@ -65,7 +65,7 @@ export class DraftStore {
       text,
       t,
       t + this.ttlMs,
-      voice ? 'voice' : 'text',
+      voice ? 'voice' : (kind ?? 'text'),
       voice?.audio ?? null,
       voice?.mimetype ?? null,
       voice?.ptt ? 1 : 0,

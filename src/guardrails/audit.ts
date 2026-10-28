@@ -1,6 +1,6 @@
 import type { DB } from '../db/db.js';
 
-export type AuditAction = 'prepare' | 'confirm' | 'send' | 'cancel' | 'login' | 'logout' | 'logged_out';
+export type AuditAction = 'prepare' | 'confirm' | 'send' | 'call' | 'cancel' | 'login' | 'logout' | 'logged_out';
 
 export interface AuditEntry {
   action: AuditAction;
@@ -37,7 +37,7 @@ export class AuditLog {
     );
     this.recent = db.prepare<[number], AuditRow>('SELECT * FROM audit_log ORDER BY id DESC LIMIT ?');
     this.sentTo = db.prepare<[string], { n: number }>(
-      "SELECT COUNT(*) AS n FROM audit_log WHERE action = 'send' AND result = 'ok' AND to_jid = ?",
+      "SELECT COUNT(*) AS n FROM audit_log WHERE action IN ('send', 'call') AND result = 'ok' AND to_jid = ?",
     );
   }
 

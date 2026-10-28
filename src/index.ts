@@ -10,6 +10,7 @@ import { QrTokens } from './http/qrTokens.js';
 import { createApp, listen } from './http/server.js';
 import type { ToolContext } from './tools/index.js';
 import { useSqliteAuthState } from './whatsapp/authStore.js';
+import { ElevenLabsCalls } from './voice/calls.js';
 import { SessionManager } from './whatsapp/session.js';
 import { VERSION } from './version.js';
 
@@ -86,6 +87,7 @@ async function main(): Promise<void> {
     qrTokens,
     logger,
     requireConfirm: config.requireConfirm,
+    ...(config.calls ? { calls: new ElevenLabsCalls(config.calls) } : {}),
     qrUrl: (token) => `${baseUrl}/qr?t=${encodeURIComponent(token)}`,
   };
 

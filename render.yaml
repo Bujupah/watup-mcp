@@ -32,6 +32,13 @@ services:
       # Lets claude.ai custom connectors (no custom headers) use https://<service>/mcp/<token>.
       - key: WA_MCP_ALLOW_URL_TOKEN
         value: "true"
+      # Phone calls via an ElevenLabs agent (optional): set all three in the dashboard.
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: WA_MCP_CALL_AGENT_ID
+        sync: false
+      - key: WA_MCP_CALL_PHONE_NUMBER_ID
+        sync: false
       - key: WA_MCP_REQUIRE_CONFIRM
         value: "true"
       - key: WA_MCP_ALLOWLIST

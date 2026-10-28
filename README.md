@@ -17,6 +17,7 @@ An MCP (Model Context Protocol) server that lets an AI agent read and send Whats
 - [Connecting an MCP client](#connecting-an-mcp-client)
 - [Linking your WhatsApp account](#linking-your-whatsapp-account)
 - [Tool reference](#tool-reference)
+- [Phone calls (ElevenLabs voice agent)](#phone-calls-elevenlabs-voice-agent)
 - [Guardrails](#guardrails)
 - [Security model](#security-model)
 - [Manual end-to-end checklist](#manual-end-to-end-checklist)
@@ -306,6 +307,44 @@ The tool descriptions and server instructions tell the agent to:
 - Phone input is normalized: spaces, `+`, `-`, `.` and parentheses are stripped, and `00` is treated as `+`. A country code is required, and the result must be 8–15 digits. Before the first send to a number it has never seen, the server checks it with `onWhatsApp`.
 
 ---
+
+## Phone calls (ElevenLabs voice agent)
+
+The server can place **regular phone calls** (not WhatsApp calls) through an [ElevenLabs Agents](https://elevenlabs.io/docs/agents-platform/overview) voice agent. ElevenLabs dials from a phone number imported into your ElevenLabs workspace (Twilio or SIP trunk), and the agent holds the live conversation.
+
+```mermaid
+sequenceDiagram
+    participant A as MCP client (agent)
+    participant S as whatsapp-mcp
+    participant E as ElevenLabs
+    participant P as Recipient's phone
+    A->>S: prepare_call {to, purpose}
+    S-->>A: draft (number + purpose), NOT dialed
+    Note over A: user approves
+    A->>S: confirm_call {draftId}
+    S->>E: outbound-call (agent, phone number, to, dynamic variables)
+    E->>P: rings, AI agent speaks
+    A->>S: get_call {callId}
+    S->>E: conversation status + transcript
+    S-->>A: status, summary, transcript
+```
+
+| Tool | What it does |
+|---|---|
+| `prepare_call` | `{ to, purpose }`: resolves the number, runs the allowlist and rate limits, creates a call draft (10 min). Does not dial. |
+| `confirm_call` | `{ draftId }`: dials once, after explicit approval. Returns a `callId`. |
+| `get_call` | `{ callId }`: status, duration, summary and transcript. |
+
+Calls share the guardrails with messages: the same allowlist, per-minute limit, new-contacts-per-day limit, drafts and audit log (`action = 'call'`).
+
+**Setup**
+
+1. Create an agent in ElevenLabs (voice, language, instructions). It should say it is an AI.
+2. Import a phone number into ElevenLabs (**Agents → Phone numbers**): a Twilio number, or your provider's SIP trunk if you want a local caller ID.
+3. Set on the server: `ELEVENLABS_API_KEY`, `WA_MCP_CALL_AGENT_ID` (the agent id), `WA_MCP_CALL_PHONE_NUMBER_ID` (the imported number's id), and `WA_MCP_CALL_PROVIDER` (`twilio` or `sip_trunk`). The call tools only appear when all three ids are set.
+4. Optional: reference `{{call_purpose}}` and `{{contact_name}}` in the agent's prompt; the server passes both as dynamic variables on every call.
+
+Calling people with an AI voice is regulated in many countries: get consent, say it is an AI, and never place bulk or marketing calls.
 
 ## Guardrails
 

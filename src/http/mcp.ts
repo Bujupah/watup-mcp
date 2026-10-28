@@ -9,7 +9,7 @@ import { VERSION } from '../version.js';
 /** Builds an MCP server instance with all tools bound to the shared context. */
 export function createMcpServer(ctx: ToolContext): McpServer {
   const server = new McpServer({ name: 'whatsapp-mcp', version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
-  for (const tool of toolList(ctx.requireConfirm)) {
+  for (const tool of toolList(ctx.requireConfirm, { calls: !!ctx.calls })) {
     server.registerTool(
       tool.name,
       {

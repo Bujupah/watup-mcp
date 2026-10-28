@@ -26,7 +26,7 @@ export class RateLimiter {
     this.last = now();
     this.newRecipientsStmt = db.prepare<[number], { to_jid: string; first_ts: number }>(
       `SELECT to_jid, MIN(ts) AS first_ts FROM audit_log
-       WHERE action = 'send' AND result = 'ok' AND new_recipient = 1 AND ts > ?
+       WHERE action IN ('send', 'call') AND result = 'ok' AND new_recipient = 1 AND ts > ?
        GROUP BY to_jid ORDER BY first_ts ASC`,
     );
   }
